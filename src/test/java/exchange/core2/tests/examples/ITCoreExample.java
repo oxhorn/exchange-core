@@ -53,6 +53,8 @@ public class ITCoreExample {
             }
         });
 
+        //zwq add
+
         // default exchange configuration
         ExchangeConfiguration conf = ExchangeConfiguration.defaultBuilder().build();
 
