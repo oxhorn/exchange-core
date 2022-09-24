@@ -169,6 +169,11 @@ public final class MatchingEngineRouter implements WriteBytesMarshallable {
         this.cfgL2RefreshDepth = perfCfg.getL2RefreshDepth();
     }
 
+    /**
+     * 撮合引擎处理指令的函数
+     * @param seq
+     * @param cmd
+     */
     public void processOrder(long seq, OrderCommand cmd) {
 
         final OrderCommandType command = cmd.command;

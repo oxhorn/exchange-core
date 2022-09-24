@@ -175,7 +175,7 @@ public final class GroupingProcessor implements EventProcessor {
                             triggerL2DataRequest = false;
                             cmd.serviceFlags = 1;
                         } else {
-                            cmd.serviceFlags = 0;
+                            cmd.serviceFlags = 0;//尚未准备好服务
                         }
 
                         // cleaning attached events

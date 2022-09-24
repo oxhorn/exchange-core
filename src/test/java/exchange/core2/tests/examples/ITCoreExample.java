@@ -7,10 +7,7 @@ import exchange.core2.core.SimpleEventsProcessor;
 import exchange.core2.core.common.*;
 import exchange.core2.core.common.api.*;
 import exchange.core2.core.common.api.binary.BatchAddSymbolsCommand;
-import exchange.core2.core.common.api.reports.SingleUserReportQuery;
-import exchange.core2.core.common.api.reports.SingleUserReportResult;
-import exchange.core2.core.common.api.reports.TotalCurrencyBalanceReportQuery;
-import exchange.core2.core.common.api.reports.TotalCurrencyBalanceReportResult;
+import exchange.core2.core.common.api.reports.*;
 import exchange.core2.core.common.cmd.CommandResultCode;
 import exchange.core2.core.common.config.ExchangeConfiguration;
 import lombok.extern.slf4j.Slf4j;
@@ -92,9 +89,9 @@ public class ITCoreExample {
                 .build();
 
         future = api.submitBinaryDataAsync(new BatchAddSymbolsCommand(symbolSpecXbtLtc));
-        Thread.sleep(10*1000);
+//        Thread.sleep(10*1000);
         System.out.println("BatchAddSymbolsCommand result: " + future.get());
-        Thread.sleep(10*1000);
+//        Thread.sleep(10*1000);
 
         // create user uid=301
         future = api.submitCommandAsync(ApiAddUser.builder()
@@ -193,6 +190,7 @@ public class ITCoreExample {
         // check balances
         Future<SingleUserReportResult> report1 = api.processReport(new SingleUserReportQuery(301), 0);
         System.out.println("SingleUserReportQuery 1 accounts: " + report1.get().getAccounts());
+        System.out.println("User 301 Report:"+report1.get().toString());
 
         Future<SingleUserReportResult> report2 = api.processReport(new SingleUserReportQuery(302), 0);
         System.out.println("SingleUserReportQuery 2 accounts: " + report2.get().getAccounts());
@@ -201,7 +199,7 @@ public class ITCoreExample {
         future = api.submitCommandAsync(ApiAdjustUserBalance.builder()
                 .uid(301L)
                 .currency(currencyCodeXbt)
-                .amount(-10_000_000L)
+                .amount(10_000_000L)
                 .transactionId(3L)
                 .build());
 
@@ -210,6 +208,8 @@ public class ITCoreExample {
         // check fees collected
         Future<TotalCurrencyBalanceReportResult> totalsReport = api.processReport(new TotalCurrencyBalanceReportQuery(), 0);
         System.out.println("LTC fees collected: " + totalsReport.get().getFees().get(currencyCodeLtc));
+
+        exchangeCore.shutdown();
 
     }
 }
