@@ -58,6 +58,9 @@ public final class ExchangeApi {
     // promises cache (TODO can be changed to queue)
     private final Map<Long, Consumer<OrderCommand>> promises = new ConcurrentHashMap<>();
 
+    /**
+     * TODO 此数字为何会是5？
+     */
     public static final int LONGS_PER_MESSAGE = 5;
 
 
@@ -223,6 +226,11 @@ public final class ExchangeApi {
         return future1.thenCombineAsync(future2, CommandResultCode::mergeToFirstFailed);
     }
 
+    /**
+     * 此方法功外部调用，向Exchange 提交指令
+     * @param data
+     * @return
+     */
     public CompletableFuture<CommandResultCode> submitBinaryDataAsync(final BinaryDataCommand data) {
 
         final CompletableFuture<CommandResultCode> future = new CompletableFuture<>();
@@ -233,6 +241,7 @@ public final class ExchangeApi {
                 data.getBinaryCommandTypeCode(),
                 (int) System.nanoTime(), // can be any value because sequence is used for result identification, not transferId
                 0L,
+                //将要执行的函数放入HashMap,执行结果可以从future中获得
                 seq -> promises.put(seq, orderCommand -> future.complete(orderCommand.resultCode)));
 
         return future;
@@ -295,6 +304,15 @@ public final class ExchangeApi {
                 endSeqConsumer);
     }
 
+    /**
+     * 将数据转为二进制、压缩，并发布到RingBuffer
+     * @param cmdType  命令类型， 例如 二进制
+     * @param data   命令
+     * @param dataTypeCode  命令 编码，每种二进制命令都应该有一个编码
+     * @param transferId
+     * @param timestamp  时间戳
+     * @param endSeqConsumer
+     */
     private void publishBinaryData(final OrderCommandType cmdType,
                                    final WriteBytesMarshallable data,
                                    final int dataTypeCode,
@@ -302,8 +320,10 @@ public final class ExchangeApi {
                                    final long timestamp,
                                    final LongConsumer endSeqConsumer) {
 
+        //将命令转为二进制数据，并进行压缩
         final long[] longsArrayData = SerializationUtils.bytesToLongArrayLz4(
                 lz4Compressor,
+                //将对象写入堆外内存，返回一个引用地址
                 BinaryCommandsProcessor.serializeObject(data, dataTypeCode),
                 LONGS_PER_MESSAGE);
 
@@ -333,6 +353,17 @@ public final class ExchangeApi {
 
     }
 
+    /**
+     * 发布待执行的指令到disrupter
+     * @param cmdType  指令类型
+     * @param transferId 每条指令有一个唯一值
+     * @param timestamp
+     * @param endSeqConsumer  指令执行结束后需要执行的函数
+     * @param longsArrayData  压缩后的指令
+     * @param fragmentSize  指令帧大小，一帧为4K的数据，最后一帧为余值
+     * @param offset Ringbuffer偏移量
+     * @param isLastFragment 是否最后一帧指令
+     */
     private void publishBinaryMessageFragment(OrderCommandType cmdType,
                                               int transferId,
                                               long timestamp,
@@ -352,6 +383,7 @@ public final class ExchangeApi {
             int ptr = offset * LONGS_PER_MESSAGE;
             for (long seq = lowSeq; seq <= highSeq; seq++) {
 
+                //很奇怪，没用用到cmd
                 OrderCommand cmd = ringBuffer.get(seq);
                 cmd.command = cmdType;
                 cmd.userCookie = transferId;
@@ -740,6 +772,7 @@ public final class ExchangeApi {
             promises.put(seq, callback);
 
         } finally {
+            //发布事件，此事件非范型
             ringBuffer.publish(seq);
         }
         return seq;

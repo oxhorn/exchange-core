@@ -76,8 +76,13 @@ public final class AffinityThreadFactory implements ThreadFactory {
     }
 
     public enum ThreadAffinityMode {
+
+        //线程亲和力启用每个物理核心
         THREAD_AFFINITY_ENABLE_PER_PHYSICAL_CORE,
+
+        //每个逻辑核心的线程关联启用
         THREAD_AFFINITY_ENABLE_PER_LOGICAL_CORE,
+        //线程关联禁用
         THREAD_AFFINITY_DISABLE
     }
 

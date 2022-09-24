@@ -92,8 +92,9 @@ public class ITCoreExample {
                 .build();
 
         future = api.submitBinaryDataAsync(new BatchAddSymbolsCommand(symbolSpecXbtLtc));
+        Thread.sleep(10*1000);
         System.out.println("BatchAddSymbolsCommand result: " + future.get());
-
+        Thread.sleep(10*1000);
 
         // create user uid=301
         future = api.submitCommandAsync(ApiAddUser.builder()
@@ -102,6 +103,7 @@ public class ITCoreExample {
 
         System.out.println("ApiAddUser 1 result: " + future.get());
 
+        api.submitCommand(ApiAddUser.builder().uid(3001L).build());
 
         // create user uid=302
         future = api.submitCommandAsync(ApiAddUser.builder()

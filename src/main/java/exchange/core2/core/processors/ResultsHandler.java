@@ -10,6 +10,7 @@ import java.util.function.ObjLongConsumer;
 @RequiredArgsConstructor
 public final class ResultsHandler implements EventHandler<OrderCommand> {
 
+    //创建ExchangeCorde由调用方传入，用于执行disuptor 消费完事件后将结果通知出去事
     private final ObjLongConsumer<OrderCommand> resultsConsumer;
 
     private boolean processingEnabled = true;

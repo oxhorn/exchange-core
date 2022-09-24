@@ -151,10 +151,11 @@ public final class MatchingEngineRouter implements WriteBytesMarshallable {
 
         } else {
             this.binaryCommandsProcessor = new BinaryCommandsProcessor(
-                    this::handleBinaryMessage,
+                    this::handleBinaryMessage,// 可以认为是函数地址
                     this::handleReportQuery,
                     sharedPool,
                     exchangeCfg.getReportsQueriesCfg(),
+                    //todo 此参数何意
                     shardId + 1024);
 
             this.orderBooks = new IntObjectHashMap<>();

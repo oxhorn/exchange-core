@@ -62,6 +62,7 @@ public final class RiskEngine implements WriteBytesMarshallable {
             ISerializationProcessor.SerializedModuleType.RISK_ENGINE;
 
     // state
+    //存储Symbol
     private final SymbolSpecificationProvider symbolSpecificationProvider;
     private final UserProfileService userProfileService;
     private final BinaryCommandsProcessor binaryCommandsProcessor;

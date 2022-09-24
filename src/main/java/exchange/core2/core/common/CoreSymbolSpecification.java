@@ -23,6 +23,9 @@ import net.openhft.chronicle.bytes.WriteBytesMarshallable;
 
 import java.util.Objects;
 
+/**
+ * 所有字段一律用数字，方便以可控大小写入RingBuffer
+ */
 @Builder
 @AllArgsConstructor
 @Getter

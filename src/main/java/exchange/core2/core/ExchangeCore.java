@@ -102,12 +102,12 @@ public final class ExchangeCore {
 
         final IOrderBook.OrderBookFactory orderBookFactory = perfCfg.getOrderBookFactory();
 
-        final int matchingEnginesNum = perfCfg.getMatchingEnginesNum();
-        final int riskEnginesNum = perfCfg.getRiskEnginesNum();
+        final int matchingEnginesNum = perfCfg.getMatchingEnginesNum(); //1~4个
+        final int riskEnginesNum = perfCfg.getRiskEnginesNum();//1~2个
 
         final SerializationConfiguration serializationCfg = exchangeConfiguration.getSerializationCfg();
 
-        // creating serialization processor
+        // creating serialization processor，预写日志，用于WAL
         serializationProcessor = serializationCfg.getSerializationProcessorFactory().apply(exchangeConfiguration);
 
         // creating shared objects pool
@@ -125,14 +125,17 @@ public final class ExchangeCore {
 
         disruptor.setDefaultExceptionHandler(exceptionHandler);
 
+
         // advice completable future to use the same CPU socket as disruptor
+        //todo 确认线程池的选择是否有优化空间
         final ExecutorService loaderExecutor = Executors.newFixedThreadPool(matchingEnginesNum + riskEnginesNum, threadFactory);
 
         // start creating matching engines
         final Map<Integer, CompletableFuture<MatchingEngineRouter>> matchingEngineFutures = IntStream.range(0, matchingEnginesNum)
                 .boxed()
                 .collect(Collectors.toMap(
-                        shardId -> shardId,
+                        shardId -> shardId,//todo 有何作用？
+                        //在线程池中初始化撮合引擎
                         shardId -> CompletableFuture.supplyAsync(
                                 () -> new MatchingEngineRouter(shardId, matchingEnginesNum, serializationProcessor, orderBookFactory, sharedPool, exchangeConfiguration),
                                 loaderExecutor)));
@@ -149,8 +152,11 @@ public final class ExchangeCore {
                                 loaderExecutor)));
 
         final EventHandler<OrderCommand>[] matchingEngineHandlers = matchingEngineFutures.values().stream()
+                //等撮合引擎都创建完毕才会结束
                 .map(CompletableFuture::join)
+                //mer 撮合引擎， 此处含义，输入撮合引擎作为参数，构造一个EventHandler<OrderCommand>
                 .map(mer -> (EventHandler<OrderCommand>) (cmd, seq, eob) -> mer.processOrder(seq, cmd))
+                //此处语法未看太懂
                 .toArray(ExchangeCore::newEventHandlersArray);
 
         final Map<Integer, RiskEngine> riskEngines = riskEngineFutures.entrySet().stream()
@@ -159,12 +165,18 @@ public final class ExchangeCore {
                         entry -> entry.getValue().join()));
 
 
+        //todo 目前尚不清楚master 和 salve 有何区别
         final List<TwoStepMasterProcessor> procR1 = new ArrayList<>(riskEnginesNum);
         final List<TwoStepSlaveProcessor> procR2 = new ArrayList<>(riskEnginesNum);
 
         // 1. grouping processor (G)
         final EventHandlerGroup<OrderCommand> afterGrouping =
-                disruptor.handleEventsWith((rb, bs) -> new GroupingProcessor(rb, rb.newBarrier(bs), perfCfg, coreWaitStrategy, sharedPool));
+                //传入的参数相当于匿名函数，实现了 EventProcessorFactory 的 方法： EventProcessor createEventProcessor(RingBuffer<T> ringBuffer, Sequence[] barrierSequences);
+                //GroupingProcessor 是 EventProcessor的实现类
+                disruptor.handleEventsWith((rb, bs) ->
+                            new GroupingProcessor(rb, rb.newBarrier(bs), perfCfg, coreWaitStrategy, sharedPool)
+
+                );
 
         // 2. [journaling (J)] in parallel with risk hold (R1) + matching engine (ME)
 
@@ -175,18 +187,29 @@ public final class ExchangeCore {
             afterGrouping.handleEventsWith(jh);
         }
 
+        //多个RiskEngine，则会创建多个TwoStepMasterProcessor，将每个riskEngine组装的EventHandler放置在了afterGrouping中
+        //放在group中的Eventhandler只有一个会被执行
         riskEngines.forEach((idx, riskEngine) -> afterGrouping.handleEventsWith(
                 (rb, bs) -> {
-                    final TwoStepMasterProcessor r1 = new TwoStepMasterProcessor(rb, rb.newBarrier(bs), riskEngine::preProcessCommand, exceptionHandler, coreWaitStrategy, "R1_" + idx);
+                    final TwoStepMasterProcessor r1 = new TwoStepMasterProcessor(
+                            rb,
+                            rb.newBarrier(bs),
+                            riskEngine::preProcessCommand, //此方法相当于SimpleEventHandler中 onEvent方法的实现
+                            exceptionHandler,  //todo 异常处理的实现，问题：此Exceptionhandler已经传入过 distuptor了，这里为何要再传入一遍？
+                            coreWaitStrategy,
+                            "R1_" + idx);
                     procR1.add(r1);
                     return r1;
                 }));
 
+        //组织Event事件处理顺序，限制性after，在执行后面的matchEngineHandler
         disruptor.after(procR1.toArray(new TwoStepMasterProcessor[0])).handleEventsWith(matchingEngineHandlers);
 
         // 3. risk release (R2) after matching engine (ME)
         final EventHandlerGroup<OrderCommand> afterMatchingEngine = disruptor.after(matchingEngineHandlers);
 
+        //添加Slave执行
+        //todo 问题：RiskSlave 如果有多个，会被以此添加，执行时只执行一个Slave还是两个都执行？
         riskEngines.forEach((idx, riskEngine) -> afterMatchingEngine.handleEventsWith(
                 (rb, bs) -> {
                     final TwoStepSlaveProcessor r2 = new TwoStepSlaveProcessor(rb, rb.newBarrier(bs), riskEngine::handlerRiskRelease, exceptionHandler, "R2_" + idx);
@@ -204,6 +227,7 @@ public final class ExchangeCore {
 
         mainHandlerGroup.handleEventsWith((cmd, seq, eob) -> {
             resultsHandler.onEvent(cmd, seq, eob);
+            //通知调用方
             api.processResult(seq, cmd); // TODO SLOW ?(volatile operations)
         });
 
@@ -212,7 +236,7 @@ public final class ExchangeCore {
 
         try {
             loaderExecutor.shutdown();
-            loaderExecutor.awaitTermination(1, TimeUnit.SECONDS);
+            loaderExecutor.awaitTermination(10, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             throw new RuntimeException(ex);
         }
@@ -223,7 +247,6 @@ public final class ExchangeCore {
             log.debug("Starting disruptor...");
             disruptor.start();
             started = true;
-
             serializationProcessor.replayJournalFullAndThenEnableJouraling(exchangeConfiguration.getInitStateCfg(), api);
         }
     }

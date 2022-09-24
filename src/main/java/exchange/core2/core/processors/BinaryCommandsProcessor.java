@@ -183,6 +183,12 @@ public final class BinaryCommandsProcessor implements WriteBytesMarshallable, St
         }
     }
 
+    /**
+     * 将Java对象转为二进制
+     * @param data
+     * @param objectType
+     * @return
+     */
     public static NativeBytes<Void> serializeObject(WriteBytesMarshallable data, int objectType) {
         final NativeBytes<Void> bytes = Bytes.allocateElasticDirect(128);
         bytes.writeInt(objectType);

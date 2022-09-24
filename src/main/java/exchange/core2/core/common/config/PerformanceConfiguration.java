@@ -152,7 +152,7 @@ public final class PerformanceConfiguration {
                 .matchingEnginesNum(4)
                 .riskEnginesNum(2)
                 .msgsInGroupLimit(4_096)
-                .maxGroupDurationNs(4_000_000)
+                .maxGroupDurationNs(4_000_000) //4ms
                 .sendL2ForEveryCmd(false)
                 .l2RefreshDepth(8)
                 .threadFactory(new AffinityThreadFactory(AffinityThreadFactory.ThreadAffinityMode.THREAD_AFFINITY_ENABLE_PER_LOGICAL_CORE))
